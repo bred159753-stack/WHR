@@ -1,0 +1,1880 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>專業工時管理系統 V18</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --panel-blur: 16px;
+            --day-opacity: 0.45;
+        }
+
+        body {
+            color: #2C221E;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            min-height: 100vh;
+        }
+
+        /* 磨砂玻璃 (Glassmorphism) 面板風格 */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.52);
+            backdrop-filter: blur(var(--panel-blur)) saturate(180%);
+            -webkit-backdrop-filter: blur(var(--panel-blur)) saturate(180%);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.08), 0 2px 8px 0 rgba(0, 0, 0, 0.04);
+            border-radius: 1rem;
+        }
+
+        /* 次級透光子面板 */
+        .glass-subcard {
+            background: rgba(244, 243, 239, 0.45);
+            backdrop-filter: blur(var(--panel-blur));
+            -webkit-backdrop-filter: blur(var(--panel-blur));
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            border-radius: 0.75rem;
+        }
+
+        /* 彈窗磨砂風格 */
+        .glass-modal {
+            background: rgba(255, 255, 255, 0.88);
+            backdrop-filter: blur(var(--panel-blur)) saturate(190%);
+            -webkit-backdrop-filter: blur(var(--panel-blur)) saturate(190%);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+            border-radius: 1.25rem;
+        }
+
+        /* 月曆網格與日期格子 (優化透光：移除重複 backdrop-filter 確保可直接透視被霧化的大圖背景) */
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 2px;
+            background-color: rgba(200, 195, 185, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            border-radius: 0.75rem;
+            overflow: hidden;
+        }
+
+        .calendar-day {
+            min-height: 120px;
+            background-color: rgba(255, 255, 255, var(--day-opacity));
+            padding: 8px;
+            transition: background-color 0.2s ease, opacity 0.2s ease;
+            position: relative;
+        }
+        .calendar-day:hover { 
+            background-color: rgba(255, 255, 255, min(1, calc(var(--day-opacity) + 0.22)));
+        }
+
+        .day-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; }
+        
+        .add-btn {
+            color: #2C221E;
+            font-weight: bold;
+            cursor: pointer;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            background-color: rgba(232, 230, 223, 0.8);
+            transition: all 0.15s ease;
+        }
+        .add-btn:hover { background-color: #2C221E; color: #FFFFFF; }
+
+        .log-entry {
+            font-size: 10px;
+            padding: 2px 5px;
+            margin-bottom: 2px;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #2C221E; 
+            transition: all 0.15s ease-in-out;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .gantt-container {
+            overflow-x: auto;
+            background: rgba(255, 255, 255, 0.65);
+            backdrop-filter: blur(var(--panel-blur));
+            padding: 20px;
+            border-radius: 1rem;
+        }
+        .gantt-row {
+            display: flex;
+            align-items: center;
+            height: 32px;
+            margin-bottom: 4px;
+        }
+        .gantt-label { width: 120px; font-size: 12px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .gantt-bar-area { flex-grow: 1; height: 100%; background: rgba(244, 243, 239, 0.5); position: relative; border-radius: 6px; display: flex; }
+        .gantt-day-cell { flex: 1; border-right: 1px solid rgba(44,34,30,0.05); position: relative; height: 100%; }
+        .gantt-bar { position: absolute; height: 80%; top: 10%; background: #2C221E; border-radius: 3px; min-width: 2px; }
+        input[type="file"] { display: none; }
+        
+        /* 每日備註彈窗風格 */
+        .note-popup {
+            box-shadow: 0 15px 35px -5px rgba(44, 34, 30, 0.25), 0 8px 15px -6px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            z-index: 50;
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(16px);
+            border-radius: 0.85rem;
+        }
+
+        /* 隱藏捲軸但仍可捲動 */
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(44,34,30,0.2); border-radius: 4px; }
+    </style>
+</head>
+<body class="p-4 md:p-8 relative">
+
+    <!-- 全頁固定不隨滾動移動的桌布背景圖層 -->
+    <div id="fixed-bg-layer" class="fixed inset-0 z-[-2] bg-cover bg-center bg-no-repeat transition-all duration-700 filter brightness-95"></div>
+    <div class="fixed inset-0 z-[-1] bg-black/10 backdrop-blur-[1px] pointer-events-none"></div>
+
+    <div class="max-w-7xl mx-auto space-y-6">
+        
+        <!-- 1. 頂部管理區：擴大的管理項目與右移的當月項目 -->
+        <div class="glass-panel p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- 新增/管理項目 (資料夾系統) - 擴大佔用 2/3 版面 -->
+            <div class="lg:col-span-2 space-y-3">
+                <h3 class="text-sm font-bold text-[#42342E] flex items-center justify-between">
+                    <span>新增/管理項目 (拖曳標籤頁可交換資料夾順序，拖曳項目至標籤頁可移動分類)</span>
+                </h3>
+                
+                <!-- 新增資料夾欄位 -->
+                <div class="flex gap-2">
+                    <input type="text" id="newFolderInput" placeholder="新增自訂資料夾 (例：立繪、設定、場景)" class="flex-1 border border-[#DCD8CD]/80 bg-white/70 p-2 rounded-lg text-xs focus:outline-none focus:border-[#2C221E] shadow-sm">
+                    <button onclick="addFolder()" class="bg-[#2C221E] hover:bg-[#42342E] text-white px-3.5 py-2 rounded-lg text-xs font-bold transition shrink-0 shadow-sm">新增資料夾</button>
+                </div>
+
+                <!-- 選擇資料夾 & 新增項目 -->
+                <div class="space-y-2 border-t pt-2 border-white/50">
+                    <div class="text-[11px] font-bold text-[#6E5D50] mb-1">分類資料夾列表：</div>
+                    <div id="folderTabsContainer" class="flex flex-wrap gap-1.5 min-h-[38px] glass-subcard p-1.5 rounded-xl border border-dashed border-[#DCD8CD]/60">
+                        <!-- 動態生成拖曳目標標籤 -->
+                    </div>
+
+                    <div class="flex gap-2 mt-2">
+                        <input type="text" id="newProjInput" placeholder="在當前資料夾中新增項目" class="flex-1 border border-[#DCD8CD]/80 bg-white/70 p-2 rounded-lg text-xs focus:outline-none focus:border-[#2C221E] shadow-sm">
+                        <button onclick="addProjectToFolder()" class="bg-[#8C7A6B] hover:bg-[#6E5D50] text-white px-3 py-2 rounded-lg text-xs font-bold transition shrink-0 shadow-sm">新增項目</button>
+                    </div>
+                </div>
+
+                <!-- 項目展示區與顯示控制項 -->
+                <div class="glass-subcard p-3 space-y-3">
+                    <div>
+                        <p class="text-[9px] text-[#6E5D50] mb-1.5 font-bold">拖曳項目可分類，單擊項目直接加入「當月項目」：</p>
+                        <div id="projectManageList" class="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto custom-scrollbar"></div>
+                    </div>
+                    
+                    <!-- 可展開之控制與偏好設定區 -->
+                    <div class="pt-2 border-t border-[#DCD8CD]/50 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <button onclick="toggleSettingsPanel()" id="toggleSettingsBtn" class="flex items-center gap-1.5 text-xs font-bold text-[#5C4D44] hover:text-[#2C221E] transition py-1 px-2.5 rounded-lg bg-white/60 border border-white/80 shadow-sm">
+                                <span>顯示控制項</span>
+                                <span id="settingsToggleIcon" class="text-xs font-black transition-transform">►</span>
+                            </button>
+                        </div>
+
+                        <!-- 展開選單面板 (調整後包含 3 個控制項) -->
+                        <div id="settingsPanel" class="hidden p-3 bg-white/80 border border-white rounded-xl shadow-inner space-y-3 mt-2">
+                            <div class="text-[11px] font-bold text-[#8C7A6B] border-b border-[#E8E6DF] pb-1">顯示與顏色偏好設定：</div>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                <!-- 1. 項目顏色飽和度 -->
+                                <label for="saturationInput" class="text-xs font-bold text-[#5C4D44] flex items-center justify-between gap-2 cursor-pointer bg-white/50 p-2 rounded-lg border border-white/60">
+                                    <span>項目顏色飽和度：</span>
+                                    <div class="flex items-center gap-1.5">
+                                        <input type="range" id="saturationInput" min="0" max="100" value="85" oninput="onSaturationChange(this.value)" class="w-20 accent-[#2C221E] cursor-pointer">
+                                        <span id="saturationValue" class="text-xs font-bold text-[#2C221E] w-8 text-right">85%</span>
+                                    </div>
+                                </label>
+
+                                <!-- 2. 月曆日期格子透明度 (0%~100%) -->
+                                <label for="calendarDayOpacityInput" class="text-xs font-bold text-[#5C4D44] flex items-center justify-between gap-2 cursor-pointer bg-white/50 p-2 rounded-lg border border-white/60">
+                                    <span>月曆日期格子透明度：</span>
+                                    <div class="flex items-center gap-1.5">
+                                        <input type="range" id="calendarDayOpacityInput" min="0" max="100" value="45" oninput="onCalendarDayOpacityChange(this.value)" class="w-20 accent-[#2C221E] cursor-pointer">
+                                        <span id="calendarDayOpacityValue" class="text-xs font-bold text-[#2C221E] w-8 text-right">45%</span>
+                                    </div>
+                                </label>
+
+                                <!-- 3. 其餘底板霧化 (0~20px) -->
+                                <label for="panelBlurInput" class="text-xs font-bold text-[#5C4D44] flex items-center justify-between gap-2 cursor-pointer bg-white/50 p-2 rounded-lg border border-white/60">
+                                    <span>其餘底板霧化：</span>
+                                    <div class="flex items-center gap-1.5">
+                                        <input type="range" id="panelBlurInput" min="0" max="20" value="16" oninput="onPanelBlurChange(this.value)" class="w-20 accent-[#2C221E] cursor-pointer">
+                                        <span id="panelBlurValue" class="text-xs font-bold text-[#2C221E] w-8 text-right">16px</span>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 當月項目 - 靠最右側 columns -->
+            <div class="lg:col-span-1 space-y-3 border-t lg:border-t-0 lg:border-l pt-4 lg:pt-0 lg:pl-6 border-white/50 flex flex-col justify-between">
+                <div class="space-y-3">
+                    <h3 class="text-sm font-bold text-[#42342E]">當月執行項目</h3>
+                    
+                    <!-- 當月項目獨立年月選單 -->
+                    <div class="flex gap-2">
+                        <select id="monthlyYearSelect" onchange="renderMonthlyProjects()" class="flex-1 border border-white/80 p-2 rounded-lg text-xs font-bold bg-white/80 text-[#2C221E] shadow-sm"></select>
+                        <select id="monthlyMonthSelect" onchange="renderMonthlyProjects()" class="flex-1 border border-white/80 p-2 rounded-lg text-xs font-bold bg-white/80 text-[#2C221E] shadow-sm">
+                            <option value="0">1月</option><option value="1">2月</option><option value="2">3月</option>
+                            <option value="3">4月</option><option value="4">5月</option><option value="5">6月</option>
+                            <option value="6">7月</option><option value="7">8月</option><option value="8">9月</option>
+                            <option value="9">10月</option><option value="10">11月</option><option value="11">12月</option>
+                        </select>
+                    </div>
+                    
+                    <!-- 當月項目清單 (支援內部拖曳排序) -->
+                    <div class="glass-subcard p-2.5">
+                        <p class="text-[9px] text-[#6E5D50] mb-1.5 font-bold">此月執行清單 (按住項目拖曳可重新排列順序)：</p>
+                        <div id="monthlyProjectList" class="flex flex-wrap gap-1.5 min-h-[90px] max-h-32 overflow-y-auto custom-scrollbar content-start"></div>
+                    </div>
+                </div>
+
+                <!-- 區間工時分析按鈕 -->
+                <div class="pt-2">
+                    <button onclick="openRangeAnalysisModal()" class="w-full bg-[#2C221E] hover:bg-[#42342E] text-white py-2.5 rounded-lg text-xs font-bold shadow-md transition flex items-center justify-center gap-1">
+                        <span>區間工時分析統計</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. 月曆區 -->
+        <div class="glass-panel p-6">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                <div class="flex items-center gap-3">
+                    <h2 class="text-xl font-bold text-[#2C221E] flex items-center">
+                        月曆工時表
+                    </h2>
+                    <!-- 年月選單 -->
+                    <div class="flex items-center gap-1.5 bg-white/80 p-1.5 rounded-lg border border-white/90 shadow-sm">
+                        <select id="yearSelect" onchange="syncDateFromCalendar()" class="border border-[#DCD8CD] p-1 rounded font-bold text-xs bg-white text-[#2C221E]"></select>
+                        <select id="monthSelect" onchange="syncDateFromCalendar()" class="border border-[#DCD8CD] p-1 rounded font-bold text-xs bg-white text-[#2C221E]">
+                            <option value="0">1月</option><option value="1">2月</option><option value="2">3月</option>
+                            <option value="3">4月</option><option value="4">5月</option><option value="5">6月</option>
+                            <option value="6">7月</option><option value="7">8月</option><option value="8">9月</option>
+                            <option value="9">10月</option><option value="10">11月</option><option value="11">12月</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="calendar-grid text-center">
+                <div class="bg-white/60 p-2 text-xs font-bold text-[#6E5D50]">週日</div>
+                <div class="bg-white/60 p-2 text-xs font-bold text-[#6E5D50]">週一</div>
+                <div class="bg-white/60 p-2 text-xs font-bold text-[#6E5D50]">週二</div>
+                <div class="bg-white/60 p-2 text-xs font-bold text-[#6E5D50]">週三</div>
+                <div class="bg-white/60 p-2 text-xs font-bold text-[#6E5D50]">週四</div>
+                <div class="bg-white/60 p-2 text-xs font-bold text-[#6E5D50]">週五</div>
+                <div class="bg-white/60 p-2 text-xs font-bold text-[#6E5D50]">週六</div>
+            </div>
+            <div id="calendarDays" class="calendar-grid"></div>
+        </div>
+
+        <!-- 3. 甘特圖區 -->
+        <div class="glass-panel p-6">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
+                <div class="flex items-center gap-3">
+                    <h2 class="text-xl font-bold text-[#2C221E] flex items-center">
+                        專案工時分布 (當月甘特圖)
+                    </h2>
+                    <!-- 同步年月份選單 -->
+                    <div class="flex items-center gap-1.5 bg-white/80 p-1.5 rounded-lg border border-white/90 shadow-sm">
+                        <select id="ganttYearSelect" onchange="syncDateFromGantt()" class="border border-[#DCD8CD] p-1 rounded font-bold text-xs bg-white text-[#2C221E]"></select>
+                        <select id="ganttMonthSelect" onchange="syncDateFromGantt()" class="border border-[#DCD8CD] p-1 rounded font-bold text-xs bg-white text-[#2C221E]">
+                            <option value="0">1月</option><option value="1">2月</option><option value="2">3月</option>
+                            <option value="3">4月</option><option value="4">5月</option><option value="5">6月</option>
+                            <option value="6">7月</option><option value="7">8月</option><option value="8">9月</option>
+                            <option value="9">10月</option><option value="10">11月</option><option value="11">12月</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="flex flex-wrap items-center gap-3">
+                    <div id="ganttFilterContainer" class="flex items-center gap-2 glass-subcard p-2 rounded-xl text-xs">
+                        <span class="font-bold text-[#6E5D50]">顯示項目:</span>
+                        <div id="ganttCheckboxes" class="flex flex-wrap gap-2"></div>
+                    </div>
+                    <div class="flex items-center gap-2 glass-subcard p-2 rounded-xl">
+                        <label class="text-xs font-bold text-[#5C4D44]">單日基準工時 (N):</label>
+                        <input type="number" id="baseHoursInput" value="7.5" step="1" min="1" onchange="onBaseHoursChange()" class="w-16 border border-[#DCD8CD] rounded-md p-1 text-sm text-center bg-white shadow-sm">
+                    </div>
+                </div>
+            </div>
+            <div id="ganttChart" class="gantt-container border border-white/60"></div>
+        </div>
+
+        <!-- 4. 項目階段總紀錄 -->
+        <div class="glass-panel p-6">
+            <h2 class="text-xl font-bold text-[#2C221E] mb-4 flex items-center">
+                項目階段總紀錄 (戳記統計)
+            </h2>
+            <div class="mb-4">
+                <select id="summaryProjSelect" onchange="renderSummaryReport()" class="w-full md:w-64 border border-white/80 p-2.5 rounded-xl text-sm font-bold bg-white/80 text-[#2C221E] shadow-sm">
+                    <option value="">-- 選擇項目查看戳記區間 --</option>
+                </select>
+            </div>
+            <div id="summaryReportContent" class="glass-subcard p-6 min-h-[150px]">
+                <p class="text-[#8C7A6B] text-center py-10">請選擇一個項目以產生紀錄報表</p>
+            </div>
+        </div>
+
+        <!-- 5. 重新命名區 (項目與資料夾) -->
+        <div class="glass-panel p-6 space-y-5">
+            <h3 class="text-sm font-bold text-[#5C4D44] flex items-center">
+                重新命名
+            </h3>
+
+            <!-- (1) 項目重新命名 -->
+            <div class="p-4 glass-subcard space-y-2">
+                <div class="text-xs font-bold text-[#2C221E] mb-1 flex items-center gap-1">
+                    <span>項目重新命名</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                    <div>
+                        <label class="block text-xs text-[#6E5D50] mb-1">選擇現有項目：</label>
+                        <select id="renameSourceSelect" class="w-full border border-white/80 p-2 rounded-lg text-sm font-bold bg-white/80 text-[#2C221E]">
+                            <option value="">-- 選擇項目 --</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-[#6E5D50] mb-1">設定新項目名稱：</label>
+                        <input type="text" id="renameNewInput" placeholder="輸入新項目名稱" class="w-full border border-white/80 p-2 rounded-lg text-sm bg-white/80 text-[#2C221E]">
+                    </div>
+                    <button onclick="executeRename()" class="bg-[#8C7A6B] hover:bg-[#6E5D50] text-white px-6 py-2 rounded-lg text-sm font-bold transition shadow-sm">執行項目重新命名</button>
+                </div>
+                <p class="text-[10px] text-[#6E5D50]">更新後，月曆中的所有歷史數據名稱將會同步變更。</p>
+            </div>
+
+            <!-- (2) 資料夾重新命名 -->
+            <div class="p-4 glass-subcard space-y-2">
+                <div class="text-xs font-bold text-[#2C221E] mb-1 flex items-center gap-1">
+                    <span>資料夾重新命名</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                    <div>
+                        <label class="block text-xs text-[#6E5D50] mb-1">選擇現有資料夾：</label>
+                        <select id="renameFolderSourceSelect" class="w-full border border-white/80 p-2 rounded-lg text-sm font-bold bg-white/80 text-[#2C221E]">
+                            <option value="">-- 選擇資料夾 --</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-[#6E5D50] mb-1">設定新資料夾名稱：</label>
+                        <input type="text" id="renameFolderNewInput" placeholder="輸入新資料夾名稱" class="w-full border border-white/80 p-2 rounded-lg text-sm bg-white/80 text-[#2C221E]">
+                    </div>
+                    <button onclick="executeFolderRename()" class="bg-[#8C7A6B] hover:bg-[#6E5D50] text-white px-6 py-2 rounded-lg text-sm font-bold transition shadow-sm">執行資料夾重新命名</button>
+                </div>
+                <p class="text-[10px] text-[#6E5D50]">注意：預設資料夾亦可被重新命名，但其「無法被刪除」及自動歸屬預設功能將持續維持。</p>
+            </div>
+        </div>
+
+        <!-- 6. 危險區域 -->
+        <div class="bg-red-500/10 backdrop-blur-md p-6 rounded-2xl border border-red-200/50">
+            <h3 class="text-sm font-bold text-[#A84A32] mb-3 flex items-center">
+                危險區域：清除數據
+            </h3>
+            <div class="flex flex-col md:flex-row gap-4 items-end">
+                <div class="flex-1">
+                    <label class="block text-xs text-[#C27866] mb-1">選擇要「完全移除」的項目數據：</label>
+                    <select id="deleteDataSelect" class="w-full border border-red-200 p-2 rounded-lg text-sm font-bold bg-white/80 text-[#A84A32]">
+                        <option value="">-- 選擇項目 --</option>
+                    </select>
+                </div>
+                <button onclick="purgeProjectData()" class="bg-[#A84A32] hover:bg-[#853723] text-white px-6 py-2 rounded-lg text-sm font-bold transition shadow-sm">移除所有相關紀錄</button>
+            </div>
+            <p class="mt-2 text-[10px] text-[#C27866]">注意：此動作將刪除該項目的所有歷史月曆紀錄且無法復原。</p>
+        </div>
+
+        <!-- 7. 匯出/覆蓋匯入 JSON 模組 -->
+        <div class="glass-panel p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <button onclick="exportJSON()" class="w-full bg-[#2C221E] hover:bg-[#42342E] text-white py-3 rounded-xl text-sm font-bold shadow-md transition-all">匯出所有數據 (JSON)</button>
+            <label class="w-full bg-red-500/10 text-[#A84A32] border border-red-200 hover:bg-red-500/20 py-3 rounded-xl text-sm font-bold text-center cursor-pointer transition-all">
+                覆蓋匯入 JSON
+                <input type="file" onchange="importJSON(event)">
+            </label>
+        </div>
+    </div>
+
+    <!-- 彈窗 - 新增工時 -->
+    <div id="modal" class="fixed inset-0 bg-black/40 backdrop-blur-sm hidden flex items-center justify-center z-50">
+        <div class="glass-modal p-6 w-85 shadow-2xl">
+            <h3 id="modalDateTitle" class="font-bold text-lg mb-4 text-[#2C221E]">新增工時</h3>
+            <div class="space-y-4">
+                <select id="modalProjSelect" class="w-full border border-white/80 p-2.5 rounded-xl text-sm bg-white/80 text-[#2C221E] shadow-sm"></select>
+                <input type="number" id="modalHoursInput" step="0.5" placeholder="輸入時數 (hr)" class="w-full border border-white/80 p-2.5 rounded-xl text-sm text-[#2C221E] bg-white/80 shadow-sm">
+                
+                <div class="space-y-2 p-3 glass-subcard">
+                    <div class="flex items-center gap-2">
+                        <input type="checkbox" id="modalIsMark" onchange="toggleMarkNote()" class="w-4 h-4 accent-[#2C221E]">
+                        <label for="modalIsMark" class="text-sm text-[#5C4D44] font-bold">是否戳記</label>
+                    </div>
+                    <div id="markNoteContainer" class="hidden">
+                        <input type="text" id="modalMarkNote" placeholder="輸入階段備註 (如：方案)" class="w-full border border-white p-2 rounded-lg text-[12px] bg-white text-[#2C221E]">
+                    </div>
+                </div>
+
+                <div class="flex gap-2 mt-4">
+                    <button onclick="closeModal()" class="flex-1 bg-white/60 hover:bg-white/90 text-[#2C221E] py-2.5 rounded-xl text-sm font-bold border border-white/80 transition">取消</button>
+                    <button onclick="confirmAddLog()" class="flex-1 bg-[#2C221E] hover:bg-[#42342E] text-white py-2.5 rounded-xl text-sm font-bold shadow-md transition">確定</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 彈窗 - 自訂區間工時分析統計 -->
+    <div id="rangeAnalysisModal" class="fixed inset-0 bg-black/40 backdrop-blur-sm hidden flex items-center justify-center z-50">
+        <div class="glass-modal p-6 w-[90%] max-w-2xl overflow-y-auto max-h-[90vh] space-y-4">
+            <div class="flex justify-between items-center border-b border-white/60 pb-2">
+                <h3 class="font-bold text-lg text-[#2C221E] flex items-center gap-1">自訂區間工時分析</h3>
+                <button onclick="closeRangeAnalysisModal()" class="text-[#8C7A6B] hover:text-[#2C221E] font-bold text-lg">✕</button>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-[#6E5D50] mb-1">開始日期：</label>
+                    <input type="date" id="rangeStartDate" class="w-full border border-white/80 p-2.5 rounded-xl text-sm bg-white/80 text-[#2C221E]" onchange="generateRangeAnalysis()">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-[#6E5D50] mb-1">結束日期：</label>
+                    <input type="date" id="rangeEndDate" class="w-full border border-white/80 p-2.5 rounded-xl text-sm bg-white/80 text-[#2C221E]" onchange="generateRangeAnalysis()">
+                </div>
+            </div>
+
+            <div id="rangeAnalysisResult" class="hidden space-y-4">
+                <div class="glass-subcard p-4">
+                    <h4 class="text-xs font-bold text-[#6E5D50] mb-2">項目時數匯總</h4>
+                    <div id="rangeProjectsList" class="space-y-2 max-h-40 overflow-y-auto custom-scrollbar text-sm">
+                        <!-- 項目總時數 -->
+                    </div>
+                </div>
+                <div class="h-64 w-full">
+                    <canvas id="rangeChart"></canvas>
+                </div>
+            </div>
+            
+            <div id="rangeAnalysisEmpty" class="text-center py-10 text-[#8C7A6B] text-sm">
+                請選取日期區間以產生統計圖表
+            </div>
+
+            <div class="flex justify-end pt-2 border-t border-white/60">
+                <button onclick="closeRangeAnalysisModal()" class="bg-white/70 hover:bg-white p-2 px-5 rounded-xl text-sm font-bold text-[#2C221E] border border-white">關閉</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let storage = JSON.parse(localStorage.getItem('timeTrackerV3')) || {
+            projects: ["專案 A", "行政事務"],
+            logs: [],
+            ganttFilters: null,
+            saturation: 85,
+            calendarDayOpacity: 45,
+            panelBlur: 16
+        };
+
+        if (storage.saturation === undefined) storage.saturation = 85;
+        if (storage.calendarDayOpacity === undefined) storage.calendarDayOpacity = 45;
+        if (storage.panelBlur === undefined) storage.panelBlur = 16;
+
+        if (!storage.folders) {
+            storage.folders = { "其他": [...storage.projects] };
+        }
+        if (storage.folders["全部"]) {
+            storage.folders["其他"] = storage.folders["全部"];
+            delete storage.folders["全部"];
+        }
+        if (!storage.defaultFolder) {
+            storage.defaultFolder = "其他";
+        }
+        if (!storage.currentFolder) {
+            storage.currentFolder = storage.defaultFolder;
+        }
+        if (!storage.monthlyProjects) {
+            storage.monthlyProjects = {};
+        }
+        if (!storage.dailyNotes) {
+            storage.dailyNotes = {};
+        }
+        if (!storage.folderOrder) {
+            storage.folderOrder = Object.keys(storage.folders);
+        }
+
+        let currentModalDate = "";
+        let activeNoteDate = "";     
+        let isEditingNote = false;    
+        let tempNoteValue = "";      
+        let rangeChartInstance = null;
+
+        // 高清 Unsplash 季節風景桌布清單 (已對調 8月與 9月 素材)
+        const presetWallpapers = [
+            "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1920&q=80", // 1月: 晴朗冬雪日光
+            "https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=1920&q=80", // 2月: 星空蔚藍雪山
+            "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&w=1920&q=80", // 3月: 晨霧寧靜山谷
+            "https://images.unsplash.com/photo-1462275646964-a0e3386b89fa?auto=format&fit=crop&w=1920&q=80", // 4月: 春天花景
+            "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1920&q=80", // 5月: 廣袤綠意森林
+            "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1920&q=80", // 6月: 壯麗峽谷瀑布
+            "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1920&q=80", // 7月: 夏日極簡海灘
+            "https://images.unsplash.com/photo-1472214103451-9374bd1c798e?auto=format&fit=crop&w=1920&q=80", // 8月: 秋季黃昏平原 (已對調至8月)
+            "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=1920&q=80", // 9月: 壯觀雲海群山 (已對調至9月)
+            "https://images.unsplash.com/photo-1509114397022-ed747cca3f65?auto=format&fit=crop&w=1920&q=80", // 10月: 楓紅深秋山林
+            "https://images.unsplash.com/photo-1486870591958-9b9d0d1dda99?auto=format&fit=crop&w=1920&q=80", // 11月: 初冬薄霧峻嶺
+            "https://images.unsplash.com/photo-1518837695005-2083093ee35b?auto=format&fit=crop&w=1920&q=80"  // 12月: 寂靜夢幻極光
+        ];
+
+        // 動態更換全頁背景圖 (優先讀取 image/YYYY_MM_bg.jpg，若無則讀取 Unsplash 景觀圖)
+        function updateDynamicBackground(year, monthIndex) {
+            const monthStr = String(monthIndex + 1).padStart(2, '0');
+            const customImgPath = `image/${year}_${monthStr}_bg.jpg`;
+            const fallbackUrl = presetWallpapers[monthIndex % 12];
+
+            const bgLayer = document.getElementById('fixed-bg-layer');
+            if (!bgLayer) return;
+
+            const imgTest = new Image();
+            imgTest.src = customImgPath;
+            imgTest.onload = function() {
+                bgLayer.style.backgroundImage = `url('${customImgPath}')`;
+            };
+            imgTest.onerror = function() {
+                bgLayer.style.backgroundImage = `url('${fallbackUrl}')`;
+            };
+        }
+
+        function toggleSettingsPanel() {
+            const panel = document.getElementById('settingsPanel');
+            const icon = document.getElementById('settingsToggleIcon');
+            if (!panel || !icon) return;
+
+            const isHidden = panel.classList.contains('hidden');
+            if (isHidden) {
+                panel.classList.remove('hidden');
+                icon.textContent = '◄';
+            } else {
+                panel.classList.add('hidden');
+                icon.textContent = '►';
+            }
+        }
+
+        function applyGlassStyles() {
+            const dayOpacity = storage.calendarDayOpacity !== undefined ? storage.calendarDayOpacity : 68;
+            const panBlur = storage.panelBlur !== undefined ? storage.panelBlur : 16;
+
+            document.documentElement.style.setProperty('--day-opacity', (dayOpacity / 100).toFixed(2));
+            document.documentElement.style.setProperty('--panel-blur', `${panBlur}px`);
+        }
+
+        function syncSettingsUI() {
+            const satVal = storage.saturation !== undefined ? storage.saturation : 85;
+            const dayOpacity = storage.calendarDayOpacity !== undefined ? storage.calendarDayOpacity : 45;
+            const panBlur = storage.panelBlur !== undefined ? storage.panelBlur : 16;
+
+            const satInput = document.getElementById('saturationInput');
+            const satDisplay = document.getElementById('saturationValue');
+            if (satInput) satInput.value = satVal;
+            if (satDisplay) satDisplay.textContent = satVal + '%';
+
+            const dayOpacityInput = document.getElementById('calendarDayOpacityInput');
+            const dayOpacityDisplay = document.getElementById('calendarDayOpacityValue');
+            if (dayOpacityInput) dayOpacityInput.value = dayOpacity;
+            if (dayOpacityDisplay) dayOpacityDisplay.textContent = dayOpacity + '%';
+
+            const panBlurInput = document.getElementById('panelBlurInput');
+            const panBlurDisplay = document.getElementById('panelBlurValue');
+            if (panBlurInput) panBlurInput.value = panBlur;
+            if (panBlurDisplay) panBlurDisplay.textContent = panBlur + 'px';
+
+            applyGlassStyles();
+        }
+
+        function ensureFolderOrder() {
+            if (!storage.folderOrder) storage.folderOrder = [];
+            Object.keys(storage.folders).forEach(f => {
+                if (!storage.folderOrder.includes(f)) {
+                    storage.folderOrder.push(f);
+                }
+            });
+            storage.folderOrder = storage.folderOrder.filter(f => storage.folders.hasOwnProperty(f));
+        }
+
+        // 初始化選單
+        const yearSel = document.getElementById('yearSelect');
+        const ganttYearSel = document.getElementById('ganttYearSelect');
+        const monthlyYearSel = document.getElementById('monthlyYearSelect');
+        
+        for(let y=2026; y<=2036; y++){
+            [yearSel, ganttYearSel, monthlyYearSel].forEach(sel => {
+                let opt = document.createElement('option');
+                opt.value = y; opt.textContent = y + "年";
+                sel.appendChild(opt);
+            });
+        }
+        
+        const initYear = 2026;
+        const initMonth = new Date().getMonth();
+        
+        yearSel.value = initYear;
+        ganttYearSel.value = initYear;
+        monthlyYearSel.value = initYear;
+        
+        document.getElementById('monthSelect').value = initMonth;
+        document.getElementById('ganttMonthSelect').value = initMonth;
+        document.getElementById('monthlyMonthSelect').value = initMonth;
+
+        function getProjectColor(str) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                hash = str.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            const h = Math.abs(hash) % 360;
+            const sat = storage.saturation !== undefined ? storage.saturation : 85;
+            
+            const borderSat = Math.min(sat, 80);
+            return {
+                bg: `hsla(${h}, ${sat}%, 88%, 0.85)`,
+                border: `hsl(${h}, ${borderSat}%, 55%)`
+            };
+        }
+
+        function onSaturationChange(val) {
+            storage.saturation = parseInt(val);
+            document.getElementById('saturationValue').textContent = val + '%';
+            saveAndRefresh();
+        }
+
+        function onCalendarDayOpacityChange(val) {
+            storage.calendarDayOpacity = parseInt(val);
+            const dayOpacityDisplay = document.getElementById('calendarDayOpacityValue');
+            if (dayOpacityDisplay) dayOpacityDisplay.textContent = val + '%';
+            applyGlassStyles();
+            localStorage.setItem('timeTrackerV3', JSON.stringify(storage));
+        }
+
+        function onPanelBlurChange(val) {
+            storage.panelBlur = parseInt(val);
+            const panBlurDisplay = document.getElementById('panelBlurValue');
+            if (panBlurDisplay) panBlurDisplay.textContent = val + 'px';
+            applyGlassStyles();
+            localStorage.setItem('timeTrackerV3', JSON.stringify(storage));
+        }
+
+        function syncDateFromCalendar() {
+            const year = document.getElementById('yearSelect').value;
+            const month = document.getElementById('monthSelect').value;
+            
+            document.getElementById('ganttYearSelect').value = year;
+            document.getElementById('ganttMonthSelect').value = month;
+            
+            updateDynamicBackground(year, parseInt(month));
+            renderCalendar();
+        }
+
+        function syncDateFromGantt() {
+            const year = document.getElementById('ganttYearSelect').value;
+            const month = document.getElementById('ganttMonthSelect').value;
+            
+            document.getElementById('yearSelect').value = year;
+            document.getElementById('monthSelect').value = month;
+            
+            updateDynamicBackground(year, parseInt(month));
+            renderCalendar();
+        }
+
+        function addFolder() {
+            const val = document.getElementById('newFolderInput').value.trim();
+            if(val && !storage.folders[val]) {
+                storage.folders[val] = [];
+                ensureFolderOrder();
+                if(!storage.folderOrder.includes(val)) {
+                    storage.folderOrder.push(val);
+                }
+                document.getElementById('newFolderInput').value = '';
+                saveAndRefresh();
+            }
+        }
+
+        function addProjectToFolder() {
+            const val = document.getElementById('newProjInput').value.trim();
+            const activeFolder = storage.currentFolder || storage.defaultFolder;
+            if(val) {
+                if(storage.projects.includes(val)) {
+                    alert("該項目名稱已存在！");
+                    return;
+                }
+                storage.projects.push(val);
+                
+                if(!storage.folders[activeFolder]) {
+                    storage.folders[activeFolder] = [];
+                }
+                storage.folders[activeFolder].push(val);
+                
+                document.getElementById('newProjInput').value = '';
+                saveAndRefresh();
+            }
+        }
+
+        function removeFolder(folderName) {
+            const defaultFolder = storage.defaultFolder || "其他";
+            if (folderName === defaultFolder) return;
+            if (confirm(`確定移除資料夾「${folderName}」嗎？\n該資料夾內的所有項目將自動移動回「${defaultFolder}」資料夾中。`)) {
+                const items = storage.folders[folderName] || [];
+                if (!storage.folders[defaultFolder]) storage.folders[defaultFolder] = [];
+                items.forEach(p => {
+                    if (!storage.folders[defaultFolder].includes(p)) {
+                        storage.folders[defaultFolder].push(p);
+                    }
+                });
+                delete storage.folders[folderName];
+                ensureFolderOrder();
+                if (storage.currentFolder === folderName) {
+                    storage.currentFolder = defaultFolder;
+                }
+                saveAndRefresh();
+            }
+        }
+
+        function removeProjectFromSystem(projName) {
+            if(confirm(`確定徹底移除項目「${projName}」嗎？\n這將會從所有資料夾及當月分配中移除該項目，已錄入的歷史工時將會保留。`)) {
+                storage.projects = storage.projects.filter(p => p !== projName);
+                Object.keys(storage.folders).forEach(f => {
+                    storage.folders[f] = storage.folders[f].filter(p => p !== projName);
+                });
+                Object.keys(storage.monthlyProjects).forEach(m => {
+                    storage.monthlyProjects[m] = storage.monthlyProjects[m].filter(p => p !== projName);
+                });
+                saveAndRefresh();
+            }
+        }
+
+        function renderFolderTabs() {
+            const container = document.getElementById('folderTabsContainer');
+            if(!container) return;
+            container.innerHTML = '';
+
+            ensureFolderOrder();
+            const activeFolder = storage.currentFolder || storage.defaultFolder;
+            const defaultFolder = storage.defaultFolder || "其他";
+
+            storage.folderOrder.forEach(f => {
+                if (!storage.folders.hasOwnProperty(f)) return;
+
+                const isSelected = f === activeFolder;
+                const tab = document.createElement('div');
+                tab.setAttribute('draggable', 'true');
+                
+                tab.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.setData("dragType", "folder");
+                    e.dataTransfer.setData("folderName", f);
+                    e.dataTransfer.effectAllowed = "move";
+                    tab.classList.add('opacity-40');
+                });
+
+                tab.addEventListener('dragend', () => {
+                    tab.classList.remove('opacity-40');
+                });
+
+                tab.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    tab.classList.add("bg-white", "border-[#2C221E]", "scale-105");
+                });
+
+                tab.addEventListener('dragleave', () => {
+                    tab.classList.remove("bg-white", "border-[#2C221E]", "scale-105");
+                });
+
+                tab.addEventListener('drop', (e) => {
+                    handleFolderTabDrop(e, f);
+                });
+
+                tab.className = `px-3 py-1 rounded-full text-xs font-bold border cursor-grab active:cursor-grabbing select-none transition-all flex items-center gap-1.5 shadow-sm
+                    ${isSelected 
+                        ? 'bg-[#2C221E] border-[#2C221E] text-white' 
+                        : 'bg-white/80 border-white/90 text-[#5C4D44] hover:bg-white'}`;
+
+                tab.onclick = () => {
+                    storage.currentFolder = f;
+                    saveAndRefresh();
+                };
+
+                const isDefault = f === defaultFolder;
+                tab.innerHTML = `
+                    <span>${f}</span>
+                    ${!isDefault ? `<span class="hover:text-red-400 font-bold ml-1 text-[10px]" onclick="event.stopPropagation(); removeFolder('${f}')">✕</span>` : ''}
+                `;
+
+                container.appendChild(tab);
+            });
+        }
+
+        function handleFolderTabDrop(e, targetFolder) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            e.currentTarget.classList.remove("bg-white", "border-[#2C221E]", "scale-105");
+
+            const dragType = e.dataTransfer.getData("dragType");
+
+            if (dragType === "folder") {
+                const sourceFolder = e.dataTransfer.getData("folderName");
+                if (sourceFolder && sourceFolder !== targetFolder) {
+                    ensureFolderOrder();
+                    const srcIdx = storage.folderOrder.indexOf(sourceFolder);
+                    const tgtIdx = storage.folderOrder.indexOf(targetFolder);
+                    
+                    if (srcIdx !== -1 && tgtIdx !== -1) {
+                        storage.folderOrder.splice(srcIdx, 1);
+                        storage.folderOrder.splice(tgtIdx, 0, sourceFolder);
+                        saveAndRefresh();
+                    }
+                }
+                return;
+            }
+
+            const projName = e.dataTransfer.getData("text/plain");
+            if (!projName) return;
+
+            let currentFolder = null;
+            Object.keys(storage.folders).forEach(f => {
+                if (storage.folders[f].includes(projName)) {
+                    currentFolder = f;
+                }
+            });
+
+            if (currentFolder === targetFolder) return;
+
+            if (currentFolder) {
+                storage.folders[currentFolder] = storage.folders[currentFolder].filter(p => p !== projName);
+            }
+
+            if (!storage.folders[targetFolder]) {
+                storage.folders[targetFolder] = [];
+            }
+            if (!storage.folders[targetFolder].includes(projName)) {
+                storage.folders[targetFolder].push(projName);
+            }
+
+            saveAndRefresh();
+        }
+
+        function renderFolderProjects() {
+            const activeFolder = storage.currentFolder || storage.defaultFolder;
+            const container = document.getElementById('projectManageList');
+            if(!container) return;
+            container.innerHTML = '';
+
+            const list = storage.folders[activeFolder] || [];
+            if(list.length === 0) {
+                container.innerHTML = `<span class="text-xs text-[#8C7A6B] italic py-1">資料夾目前為空 (可將其他資料夾項目拖入此標籤頁)</span>`;
+                return;
+            }
+
+            list.forEach(p => {
+                const colors = getProjectColor(p);
+                const tag = document.createElement('div');
+                tag.className = 'group flex items-center px-2.5 py-1 rounded-lg text-xs border cursor-grab active:cursor-grabbing hover:scale-105 select-none transition shadow-sm font-semibold backdrop-blur-sm';
+                tag.style.backgroundColor = colors.bg;
+                tag.style.borderColor = colors.border;
+                tag.setAttribute('draggable', 'true');
+
+                tag.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.setData("dragType", "project");
+                    e.dataTransfer.setData("text/plain", p);
+                    e.dataTransfer.effectAllowed = "move";
+                });
+
+                tag.onclick = (e) => {
+                    if(e.target.closest('.del-btn-sub')) return;
+                    addProjectToCurrentMonth(p);
+                };
+
+                tag.innerHTML = `
+                    <span class="font-bold text-[#2C221E] mr-1">${p}</span>
+                    <button class="del-btn-sub text-[#8C7A6B] hover:text-red-500 font-bold transition ml-1" title="徹底刪除此項目">✕</button>
+                `;
+
+                tag.querySelector('.del-btn-sub').onclick = (e) => {
+                    e.stopPropagation();
+                    removeProjectFromSystem(p);
+                };
+
+                container.appendChild(tag);
+            });
+        }
+
+        function addProjectToCurrentMonth(projName) {
+            const year = document.getElementById('monthlyYearSelect').value;
+            const month = parseInt(document.getElementById('monthlyMonthSelect').value);
+            const monthStr = `${year}-${String(month+1).padStart(2,'0')}`;
+            
+            if(!storage.monthlyProjects[monthStr]) {
+                storage.monthlyProjects[monthStr] = [];
+            }
+            if(!storage.monthlyProjects[monthStr].includes(projName)) {
+                storage.monthlyProjects[monthStr].push(projName);
+                saveAndRefresh();
+            }
+        }
+
+        function removeProjectFromMonth(projName, monthStr) {
+            if(storage.monthlyProjects[monthStr]) {
+                storage.monthlyProjects[monthStr] = storage.monthlyProjects[monthStr].filter(p => p !== projName);
+                saveAndRefresh();
+            }
+        }
+
+        function renderMonthlyProjects() {
+            const year = document.getElementById('monthlyYearSelect').value;
+            const month = parseInt(document.getElementById('monthlyMonthSelect').value);
+            const monthStr = `${year}-${String(month+1).padStart(2,'0')}`;
+            
+            const container = document.getElementById('monthlyProjectList');
+            container.innerHTML = '';
+
+            const list = storage.monthlyProjects[monthStr] || [];
+            if(list.length === 0) {
+                container.innerHTML = `<span class="text-xs text-[#8C7A6B] italic py-4 w-full text-center">尚無項目 (點選或拖曳左側項目至此處)</span>`;
+                return;
+            }
+
+            container.addEventListener('dragover', (e) => e.preventDefault());
+            container.addEventListener('drop', (e) => {
+                if (e.target !== container) return;
+                e.preventDefault();
+                const draggedProj = e.dataTransfer.getData("text/plain");
+                const draggedIdx = parseInt(e.dataTransfer.getData("index"));
+
+                if (!storage.monthlyProjects[monthStr]) storage.monthlyProjects[monthStr] = [];
+                let currentList = [...storage.monthlyProjects[monthStr]];
+
+                if (!isNaN(draggedIdx)) {
+                    const [removed] = currentList.splice(draggedIdx, 1);
+                    currentList.push(removed);
+                    storage.monthlyProjects[monthStr] = currentList;
+                    saveAndRefresh();
+                } else if (draggedProj && !currentList.includes(draggedProj)) {
+                    currentList.push(draggedProj);
+                    storage.monthlyProjects[monthStr] = currentList;
+                    saveAndRefresh();
+                }
+            });
+
+            list.forEach((p, idx) => {
+                const colors = getProjectColor(p);
+                const tag = document.createElement('div');
+                tag.className = 'flex items-center px-2 py-1 rounded-lg text-xs border select-none shadow-sm cursor-grab active:cursor-grabbing transition-all border-dashed font-semibold backdrop-blur-sm';
+                tag.style.backgroundColor = colors.bg;
+                tag.style.borderColor = colors.border;
+                tag.setAttribute('draggable', 'true');
+
+                tag.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.setData("text/plain", p);
+                    e.dataTransfer.setData("index", idx);
+                    e.dataTransfer.effectAllowed = "move";
+                    tag.classList.add('opacity-40');
+                });
+
+                tag.addEventListener('dragend', () => {
+                    tag.classList.remove('opacity-40');
+                });
+
+                tag.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    tag.classList.add('border-[#2C221E]', 'scale-105');
+                });
+
+                tag.addEventListener('dragleave', () => {
+                    tag.classList.remove('border-[#2C221E]', 'scale-105');
+                });
+
+                tag.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    tag.classList.remove('border-[#2C221E]', 'scale-105');
+
+                    const draggedProj = e.dataTransfer.getData("text/plain");
+                    const draggedIdx = parseInt(e.dataTransfer.getData("index"));
+
+                    if (!storage.monthlyProjects[monthStr]) storage.monthlyProjects[monthStr] = [];
+                    let currentList = [...storage.monthlyProjects[monthStr]];
+
+                    if (!isNaN(draggedIdx)) {
+                        if (draggedIdx !== idx) {
+                            const [removed] = currentList.splice(draggedIdx, 1);
+                            currentList.splice(idx, 0, removed);
+                            storage.monthlyProjects[monthStr] = currentList;
+                            saveAndRefresh();
+                        }
+                    } else if (draggedProj) {
+                        currentList = currentList.filter(item => item !== draggedProj);
+                        currentList.splice(idx, 0, draggedProj);
+                        storage.monthlyProjects[monthStr] = currentList;
+                        saveAndRefresh();
+                    }
+                });
+
+                tag.innerHTML = `
+                    <span class="font-bold text-[#2C221E]">${p}</span>
+                    <button onclick="event.stopPropagation(); removeProjectFromMonth('${p}', '${monthStr}')" class="ml-1.5 text-[#8C7A6B] hover:text-red-500 font-bold transition">✕</button>
+                `;
+                container.appendChild(tag);
+            });
+        }
+
+        function executeRename() {
+            const oldName = document.getElementById('renameSourceSelect').value;
+            const newName = document.getElementById('renameNewInput').value.trim();
+            if(!oldName || !newName) { alert("請選取來源項目並輸入新名稱"); return; }
+            if(storage.projects.includes(newName)) { alert("新名稱與現有項目重複"); return; }
+            if(confirm(`確定將項目「${oldName}」重新命名為「${newName}」嗎？`)) {
+                storage.projects = storage.projects.map(p => p === oldName ? newName : p);
+                storage.logs = storage.logs.map(l => { if(l.name === oldName) l.name = newName; return l; });
+                
+                Object.keys(storage.folders).forEach(f => {
+                    storage.folders[f] = storage.folders[f].map(p => p === oldName ? newName : p);
+                });
+                Object.keys(storage.monthlyProjects).forEach(m => {
+                    storage.monthlyProjects[m] = storage.monthlyProjects[m].map(p => p === oldName ? newName : p);
+                });
+
+                if(storage.ganttFilters) { storage.ganttFilters = storage.ganttFilters.map(p => p === oldName ? newName : p); }
+                document.getElementById('renameNewInput').value = '';
+                saveAndRefresh();
+            }
+        }
+
+        function executeFolderRename() {
+            const oldName = document.getElementById('renameFolderSourceSelect').value;
+            const newName = document.getElementById('renameFolderNewInput').value.trim();
+            
+            if(!oldName || !newName) { 
+                alert("請選取來源資料夾並輸入新名稱"); 
+                return; 
+            }
+            if(storage.folders[newName]) { 
+                alert("新資料夾名稱與現有資料夾重複"); 
+                return; 
+            }
+
+            if(confirm(`確定將資料夾「${oldName}」重新命名為「${newName}」嗎？`)) {
+                storage.folders[newName] = storage.folders[oldName] || [];
+                delete storage.folders[oldName];
+
+                if (storage.currentFolder === oldName) {
+                    storage.currentFolder = newName;
+                }
+
+                if ((storage.defaultFolder || "其他") === oldName) {
+                    storage.defaultFolder = newName;
+                }
+
+                ensureFolderOrder();
+                const idx = storage.folderOrder.indexOf(oldName);
+                if (idx !== -1) {
+                    storage.folderOrder[idx] = newName;
+                }
+
+                document.getElementById('renameFolderNewInput').value = '';
+                saveAndRefresh();
+            }
+        }
+
+        function purgeProjectData() {
+            const name = document.getElementById('deleteDataSelect').value;
+            if(!name) return;
+            if(confirm(`確定要刪除「${name}」的所有歷史數據嗎？`)) {
+                storage.logs = storage.logs.filter(l => l.name !== name);
+                storage.projects = storage.projects.filter(p => p !== name);
+                Object.keys(storage.folders).forEach(f => {
+                    storage.folders[f] = storage.folders[f].filter(p => p !== name);
+                });
+                Object.keys(storage.monthlyProjects).forEach(m => {
+                    storage.monthlyProjects[m] = storage.monthlyProjects[m].filter(p => p !== name);
+                });
+                saveAndRefresh();
+                alert(`已移除項目「${name}」的所有數據。`);
+            }
+        }
+
+        function handleDayClick(dateStr) {
+            if (activeNoteDate === dateStr) {
+                activeNoteDate = "";
+                isEditingNote = false;
+            } else {
+                activeNoteDate = dateStr;
+                isEditingNote = false;
+                tempNoteValue = storage.dailyNotes[dateStr] || "";
+            }
+            renderCalendar();
+        }
+
+        function startEditNote(dateStr) {
+            isEditingNote = true;
+            tempNoteValue = storage.dailyNotes[dateStr] || "";
+            renderCalendar();
+            setTimeout(() => {
+                const textarea = document.getElementById('noteTextarea');
+                if (textarea) textarea.focus();
+            }, 50);
+        }
+
+        function saveNote(dateStr) {
+            const textarea = document.getElementById('noteTextarea');
+            if (textarea) {
+                const value = textarea.value.trim();
+                if (value) {
+                    storage.dailyNotes[dateStr] = value;
+                } else {
+                    delete storage.dailyNotes[dateStr];
+                }
+            }
+            activeNoteDate = "";
+            isEditingNote = false;
+            saveAndRefresh();
+        }
+
+        function cancelEditNote() {
+            isEditingNote = false;
+            renderCalendar();
+        }
+
+        function closeNotePopup() {
+            activeNoteDate = "";
+            isEditingNote = false;
+            renderCalendar();
+        }
+
+        function startInlineEditHours(event, dateStr, globalIdx, currentHours) {
+            event.stopPropagation(); 
+            const logElement = event.currentTarget;
+            if (logElement.querySelector('input')) return; 
+
+            logElement.innerHTML = `
+                <div class="flex items-center justify-between w-full p-0.5" onclick="event.stopPropagation();">
+                    <input type="number" step="0.5" min="0" class="w-14 text-xs font-bold border border-[#2C221E] rounded-md focus:outline-none bg-white text-[#2C221E]" value="${currentHours}" onclick="event.stopPropagation();">
+                    <div class="flex gap-1 ml-1 shrink-0">
+                        <button class="text-[#2C221E] font-black hover:text-black text-[11px] px-1" onclick="event.stopPropagation(); saveInlineHours(this, ${globalIdx});">✓</button>
+                        <button class="text-[#8C7A6B] font-bold hover:text-[#5C4D44] text-[11px] px-1" onclick="event.stopPropagation(); cancelInlineHours(this);">✕</button>
+                    </div>
+                </div>
+            `;
+            
+            const input = logElement.querySelector('input');
+            input.focus();
+            input.select();
+            
+            input.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    saveInlineHours(input, globalIdx);
+                }
+            });
+        }
+
+        function saveInlineHours(element, globalIdx) {
+            const logElement = element.closest('.log-entry');
+            const input = logElement.querySelector('input');
+            const newHours = parseFloat(input.value);
+            
+            if (!isNaN(newHours) && newHours >= 0) {
+                if (storage.logs[globalIdx]) {
+                    storage.logs[globalIdx].hours = newHours;
+                    saveAndRefresh();
+                }
+            } else {
+                renderCalendar();
+            }
+        }
+
+        function cancelInlineHours(element) {
+            renderCalendar();
+        }
+
+        function renderCalendar() {
+            const year = parseInt(document.getElementById('yearSelect').value);
+            const month = parseInt(document.getElementById('monthSelect').value);
+            const firstDay = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            
+            const calendarMonthStr = `${year}-${String(month+1).padStart(2,'0')}`;
+            const calendarMonthlyProjs = storage.monthlyProjects[calendarMonthStr] || [];
+
+            const container = document.getElementById('calendarDays');
+            container.innerHTML = '';
+
+            for(let i=0; i<firstDay; i++) {
+                container.innerHTML += `<div class="calendar-day opacity-40"></div>`;
+            }
+
+            for(let d=1; d<=daysInMonth; d++) {
+                const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                
+                const logsToday = storage.logs
+                    .map((log, globalIdx) => ({ log, globalIdx }))
+                    .filter(item => item.log.date === dateStr);
+                
+                logsToday.sort((a, b) => {
+                    let idxA = calendarMonthlyProjs.indexOf(a.log.name);
+                    let idxB = calendarMonthlyProjs.indexOf(b.log.name);
+                    if (idxA === -1) idxA = 9999;
+                    if (idxB === -1) idxB = 9999;
+                    return idxA - idxB;
+                });
+                
+                const dayDiv = document.createElement('div');
+                dayDiv.className = 'calendar-day';
+                
+                dayDiv.onclick = (e) => {
+                    if (e.target.closest('.add-btn') || e.target.closest('.log-entry') || e.target.closest('.note-popup')) {
+                        return;
+                    }
+                    handleDayClick(dateStr);
+                };
+                
+                let logHtml = logsToday.map((item) => {
+                    const l = item.log;
+                    const gIdx = item.globalIdx;
+                    const colors = getProjectColor(l.name);
+                    const noteStr = l.isMark && l.markNote ? ` | ${l.markNote}` : '';
+                    return `
+                    <div class="log-entry group cursor-pointer hover:scale-[1.02] font-semibold" style="background-color: ${colors.bg}; border-left: 3.5px solid ${colors.border}; border-top: 1px solid ${colors.border}; border-right: 1px solid ${colors.border}; border-bottom: 1px solid ${colors.border};" onclick="startInlineEditHours(event, '${dateStr}', ${gIdx}, ${l.hours});" title="點擊工時數可直接修改">
+                        <span class="truncate text-[#2C221E]" title="${l.name}${noteStr}">${l.isMark ? '[戳記] ' : ''}${l.name}</span>
+                        <span class="font-black ml-1 whitespace-nowrap text-[#2C221E]">${l.hours}h</span>
+                        <button onclick="event.stopPropagation(); removeLog(${gIdx})" class="ml-1 text-[#8C7A6B] opacity-0 group-hover:opacity-100 hover:text-red-500 transition">✕</button>
+                    </div>
+                `}).join('');
+
+                const hasNote = storage.dailyNotes[dateStr] && storage.dailyNotes[dateStr].trim() !== "";
+                const noteIndicator = hasNote ? `<span class="text-[10px] font-bold text-[#8C7A6B] cursor-pointer ml-1 select-none" title="備註: ${storage.dailyNotes[dateStr]}">[備註]</span>` : '';
+
+                dayDiv.innerHTML = `
+                    <div class="day-header">
+                        <div class="flex items-center">
+                            <span class="text-sm font-bold ${isToday(year, month, d) ? 'bg-[#2C221E] text-white w-6 h-6 flex items-center justify-center rounded-full' : 'text-[#6E5D50]'}">${d}</span>
+                            ${noteIndicator}
+                        </div>
+                        <div class="add-btn" onclick="event.stopPropagation(); openModal('${dateStr}')">+</div>
+                    </div>
+                    <div class="overflow-y-auto max-h-[80px] custom-scrollbar">${logHtml}</div>
+                `;
+
+                if (activeNoteDate === dateStr) {
+                    const currentNote = storage.dailyNotes[dateStr] || "";
+                    let popupContent = "";
+
+                    if (!isEditingNote) {
+                        popupContent = `
+                            <div class="text-xs text-[#2C221E] break-words mb-2 max-h-36 overflow-y-auto custom-scrollbar glass-subcard p-3">
+                                ${currentNote ? currentNote.replace(/\n/g, '<br>') : '<span class="text-[#8C7A6B] italic">無每日備註</span>'}
+                            </div>
+                            <div class="flex gap-2 justify-end">
+                                <button onclick="event.stopPropagation(); startEditNote('${dateStr}')" class="bg-[#2C221E] hover:bg-[#42342E] text-white text-xs px-3 py-1.5 rounded-lg font-bold shadow-sm">編寫</button>
+                                <button onclick="event.stopPropagation(); closeNotePopup()" class="bg-white/80 hover:bg-white text-[#2C221E] text-xs px-3 py-1.5 rounded-lg font-bold border border-white">關閉</button>
+                            </div>
+                        `;
+                    } else {
+                        popupContent = `
+                            <textarea id="noteTextarea" onclick="event.stopPropagation();" class="w-full border border-white/80 p-2 text-xs rounded-lg mb-2 h-24 focus:outline-none focus:border-[#2C221E] bg-white/80 text-[#2C221E] shadow-sm" placeholder="輸入每日備註...">${tempNoteValue}</textarea>
+                            <div class="flex gap-2 justify-end">
+                                <button onclick="event.stopPropagation(); saveNote('${dateStr}')" class="bg-[#2C221E] hover:bg-[#42342E] text-white text-xs px-3 py-1.5 rounded-lg font-bold shadow-sm">確認</button>
+                                <button onclick="event.stopPropagation(); cancelEditNote()" class="bg-white/80 hover:bg-white text-[#2C221E] text-xs px-3 py-1.5 rounded-lg font-bold border border-white">取消</button>
+                            </div>
+                        `;
+                    }
+
+                    const colIndex = (firstDay + d - 1) % 7;
+                    const positionClass = colIndex < 4 ? 'left-full top-0 ml-2' : 'right-full top-0 mr-2';
+
+                    dayDiv.innerHTML += `
+                        <div class="note-popup absolute ${positionClass} p-4 w-80 text-left">
+                            <h4 class="text-xs font-bold text-[#5C4D44] border-b border-white/60 pb-1 mb-2 select-none flex justify-between items-center">
+                                <span>日期備註</span>
+                                <span class="text-[9px] text-[#8C7A6B] font-normal">(${dateStr.split('-').slice(1).join('/')})</span>
+                            </h4>
+                            ${popupContent}
+                        </div>
+                    `;
+                }
+                container.appendChild(dayDiv);
+            }
+            
+            updateProjectSelectors();
+            renderGanttFilter();
+            renderGantt();
+            renderSummaryReport();
+        }
+
+        function isToday(y, m, d) {
+            const today = new Date();
+            return today.getFullYear() === y && today.getMonth() === m && today.getDate() === d;
+        }
+
+        function toggleMarkNote() {
+            const isMark = document.getElementById('modalIsMark').checked;
+            document.getElementById('markNoteContainer').classList.toggle('hidden', !isMark);
+            if(!isMark) document.getElementById('modalMarkNote').value = '';
+        }
+
+        function openModal(date) {
+            currentModalDate = date;
+            document.getElementById('modalDateTitle').textContent = `${date} 新增工時`;
+            document.getElementById('modalIsMark').checked = false;
+            document.getElementById('modalMarkNote').value = '';
+            toggleMarkNote();
+            document.getElementById('modal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.add('hidden');
+        }
+
+        function confirmAddLog() {
+            const name = document.getElementById('modalProjSelect').value;
+            const hours = parseFloat(document.getElementById('modalHoursInput').value);
+            const isMark = document.getElementById('modalIsMark').checked;
+            const markNote = document.getElementById('modalMarkNote').value.trim();
+            
+            if(name && !isNaN(hours)) {
+                storage.logs.push({ 
+                    date: currentModalDate, 
+                    name: name, 
+                    hours: hours,
+                    isMark: isMark,
+                    markNote: isMark ? markNote : "" 
+                });
+                document.getElementById('modalHoursInput').value = '';
+                closeModal();
+                saveAndRefresh();
+            }
+        }
+
+        function removeLog(globalIdx) {
+            if (storage.logs[globalIdx]) {
+                storage.logs.splice(globalIdx, 1);
+                saveAndRefresh();
+            }
+        }
+
+        function renderGanttFilter() {
+            const container = document.getElementById('ganttCheckboxes');
+            container.innerHTML = '';
+
+            const calendarYear = document.getElementById('yearSelect').value;
+            const calendarMonth = parseInt(document.getElementById('monthSelect').value);
+            const calendarMonthStr = `${calendarYear}-${String(calendarMonth+1).padStart(2,'0')}`;
+            const calendarMonthlyProjs = storage.monthlyProjects[calendarMonthStr] || [];
+
+            if(!storage.ganttFilters) storage.ganttFilters = [...calendarMonthlyProjs];
+            
+            calendarMonthlyProjs.forEach(proj => {
+                const label = document.createElement('label');
+                label.className = 'flex items-center gap-1 cursor-pointer hover:text-[#2C221E] transition text-[11px] text-[#5C4D44]';
+                const isChecked = storage.ganttFilters.includes(proj);
+                label.innerHTML = `
+                    <input type="checkbox" value="${proj}" ${isChecked ? 'checked' : ''} onchange="toggleGanttFilter('${proj}')" class="rounded border-[#DCD8CD] accent-[#2C221E]">
+                    <span>${proj}</span>
+                `;
+                container.appendChild(label);
+            });
+        }
+
+        function toggleGanttFilter(proj) {
+            if(!storage.ganttFilters) storage.ganttFilters = [];
+            if(storage.ganttFilters.includes(proj)) {
+                storage.ganttFilters = storage.ganttFilters.filter(p => p !== proj);
+            } else {
+                storage.ganttFilters.push(proj);
+            }
+            saveAndRefresh();
+        }
+
+        function renderGantt() {
+            const gantt = document.getElementById('ganttChart');
+            gantt.innerHTML = '';
+            const year = parseInt(document.getElementById('yearSelect').value);
+            const month = parseInt(document.getElementById('monthSelect').value);
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const baseHours = parseFloat(document.getElementById('baseHoursInput').value) || 7.5;
+
+            const monthStart = `${year}-${String(month+1).padStart(2,'0')}-01`;
+            const monthEnd = `${year}-${String(month+1).padStart(2,'0')}-${daysInMonth}`;
+            
+            let monthLogs = storage.logs.filter(l => l.date >= monthStart && l.date <= monthEnd);
+            
+            const calendarMonthStr = `${year}-${String(month+1).padStart(2,'0')}`;
+            const calendarMonthlyProjs = storage.monthlyProjects[calendarMonthStr] || [];
+            
+            monthLogs = monthLogs.filter(l => calendarMonthlyProjs.includes(l.name));
+            
+            if(storage.ganttFilters && storage.ganttFilters.length > 0) {
+                monthLogs = monthLogs.filter(l => storage.ganttFilters.includes(l.name));
+            } else if (storage.ganttFilters && storage.ganttFilters.length === 0) {
+                gantt.innerHTML = `<p class="text-center text-[#8C7A6B] py-10">請勾選上方項目以顯示甘特圖</p>`;
+                return;
+            }
+
+            const activeProjs = [...new Set(monthLogs.map(l => l.name))];
+            if(activeProjs.length === 0) {
+                gantt.innerHTML = `<p class="text-center text-[#8C7A6B] py-10">當月尚無紀錄</p>`;
+                return;
+            }
+
+            activeProjs.sort((a, b) => {
+                let idxA = calendarMonthlyProjs.indexOf(a);
+                let idxB = calendarMonthlyProjs.indexOf(b);
+                if (idxA === -1) idxA = 9999;
+                if (idxB === -1) idxB = 9999;
+                return idxA - idxB;
+            });
+
+            let header = `<div class="gantt-row mb-2 border-b border-white/60"><div class="gantt-label font-bold text-xs text-[#8C7A6B]">項目 / 日期</div><div class="gantt-bar-area flex">`;
+            for(let i=1; i<=daysInMonth; i++) {
+                header += `<div class="gantt-day-cell flex items-center justify-center text-[8px] text-[#8C7A6B]">${i}</div>`;
+            }
+            header += `</div></div>`;
+            gantt.innerHTML += header;
+
+            activeProjs.forEach(proj => {
+                const row = document.createElement('div');
+                row.className = 'gantt-row';
+                let cellsHtml = '';
+                const projLogs = monthLogs.filter(l => l.name === proj);
+                for(let d=1; d<=daysInMonth; d++) {
+                    const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                    const dailyLog = projLogs.find(l => l.date === dateStr);
+                    let barHtml = '';
+                    if(dailyLog) {
+                        const widthPct = Math.min((dailyLog.hours / baseHours) * 100, 100);
+                        const opacity = 0.6 + (widthPct / 150);
+                        const colors = getProjectColor(proj);
+                        barHtml = `<div class="gantt-bar" style="width: ${widthPct}%; opacity: ${opacity}; background-color: ${colors.border};" title="${dailyLog.date}: ${dailyLog.hours}h"></div>`;
+                    }
+                    cellsHtml += `<div class="gantt-day-cell">${barHtml}</div>`;
+                }
+                row.innerHTML = `<div class="gantt-label text-[#5C4D44] font-medium" title="${proj}">${proj}</div><div class="gantt-bar-area">${cellsHtml}</div>`;
+                gantt.appendChild(row);
+            });
+        }
+
+        function renderSummaryReport() {
+            const projName = document.getElementById('summaryProjSelect').value;
+            const container = document.getElementById('summaryReportContent');
+            const baseHours = parseFloat(document.getElementById('baseHoursInput').value) || 7.5;
+
+            if(!projName) {
+                container.innerHTML = `<p class="text-[#8C7A6B] text-center py-10">請選擇一個項目以產生紀錄報表</p>`;
+                return;
+            }
+
+            const projLogs = storage.logs
+                .filter(l => l.name === projName)
+                .sort((a, b) => a.date.localeCompare(b.date));
+
+            if(projLogs.length === 0) {
+                container.innerHTML = `<p class="text-[#8C7A6B] text-center py-10">該項目尚無工時紀錄</p>`;
+                return;
+            }
+
+            let segments = [];
+            let currentSegment = { start: projLogs[0].date, end: '', hours: 0, note: '' };
+            
+            projLogs.forEach((log, index) => {
+                currentSegment.hours += log.hours;
+                currentSegment.end = log.date;
+
+                if(log.isMark) {
+                    currentSegment.note = log.markNote || "";
+                    segments.push({...currentSegment});
+                    if(index + 1 < projLogs.length) {
+                        currentSegment = { start: projLogs[index+1].date, end: '', hours: 0, note: '' };
+                    } else {
+                        currentSegment = null;
+                    }
+                }
+            });
+
+            if(currentSegment && currentSegment.hours > 0) {
+                segments.push(currentSegment);
+            }
+
+            let totalHours = 0;
+            let html = `<div class="space-y-4 font-mono text-sm text-[#2C221E]">`;
+            html += `<h4 class="font-bold text-[#8C7A6B] mb-2">時間：</h4><ul class="list-none space-y-1">`;
+            
+            segments.forEach(seg => {
+                totalHours += seg.hours;
+                const segDays = seg.hours / baseHours;
+                const d = Math.floor(segDays);
+                const h = (seg.hours % baseHours);
+                const timeStr = `${d > 0 ? d + 'D' : ''}${h}H`;
+                
+                const sDate = seg.start.replace(/-/g, '/');
+                const eDate = seg.end.split('-').slice(1).join('/'); 
+                const noteDisplay = seg.note ? `&nbsp; ${seg.note}` : "";
+                
+                html += `<li>${sDate}-${eDate} &nbsp;&nbsp; ${timeStr}${noteDisplay}</li>`;
+            });
+            html += `</ul>`;
+
+            const finalTotalDays = (totalHours / baseHours).toFixed(1);
+            html += `<div class="mt-6 pt-4 border-t border-white/60">
+                        <h4 class="text-lg font-black text-[#2C221E]">時長：${finalTotalDays}天</h4>
+                    </div>`;
+            html += `</div>`;
+
+            container.innerHTML = html;
+        }
+
+        function onBaseHoursChange() {
+            renderGantt();
+            renderSummaryReport();
+        }
+
+        function openRangeAnalysisModal() {
+            const year = document.getElementById('monthlyYearSelect').value;
+            const month = parseInt(document.getElementById('monthlyMonthSelect').value);
+            const startDateStr = `${year}-${String(month+1).padStart(2,'0')}-01`;
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const endDateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(daysInMonth).padStart(2,'0')}`;
+
+            document.getElementById('rangeStartDate').value = startDateStr;
+            document.getElementById('rangeEndDate').value = endDateStr;
+            
+            document.getElementById('rangeAnalysisModal').classList.remove('hidden');
+            generateRangeAnalysis();
+        }
+
+        function closeRangeAnalysisModal() {
+            document.getElementById('rangeAnalysisModal').classList.add('hidden');
+            if (rangeChartInstance) {
+                rangeChartInstance.destroy();
+                rangeChartInstance = null;
+            }
+        }
+
+        function generateRangeAnalysis() {
+            const start = document.getElementById('rangeStartDate').value;
+            const end = document.getElementById('rangeEndDate').value;
+            
+            if (!start || !end) {
+                document.getElementById('rangeAnalysisResult').classList.add('hidden');
+                document.getElementById('rangeAnalysisEmpty').classList.remove('hidden');
+                return;
+            }
+
+            if (start > end) {
+                alert("開始日期不能大於結束日期！");
+                return;
+            }
+
+            const filteredLogs = storage.logs.filter(l => l.date >= start && l.date <= end);
+            
+            const projectHours = {};
+            filteredLogs.forEach(l => {
+                if (l.hours > 0) {
+                    projectHours[l.name] = (projectHours[l.name] || 0) + l.hours;
+                }
+            });
+
+            const sortedProjects = Object.entries(projectHours)
+                .sort((a, b) => b[1] - a[1]);
+
+            if (sortedProjects.length === 0) {
+                document.getElementById('rangeAnalysisResult').classList.add('hidden');
+                document.getElementById('rangeAnalysisEmpty').innerHTML = "此自訂區間內無任何工時紀錄";
+                document.getElementById('rangeAnalysisEmpty').classList.remove('hidden');
+                return;
+            }
+
+            document.getElementById('rangeAnalysisEmpty').classList.add('hidden');
+            document.getElementById('rangeAnalysisResult').classList.remove('hidden');
+
+            const listContainer = document.getElementById('rangeProjectsList');
+            listContainer.innerHTML = '';
+            
+            let totalHoursAll = 0;
+            sortedProjects.forEach(([_, hours]) => {
+                totalHoursAll += hours;
+            });
+
+            sortedProjects.forEach(([name, hours]) => {
+                const pct = totalHoursAll > 0 ? ((hours / totalHoursAll) * 100).toFixed(1) : 0;
+                const item = document.createElement('div');
+                item.className = 'flex justify-between items-center border-b border-white/50 pb-1 last:border-0';
+                item.innerHTML = `
+                    <span class="font-medium text-[#2C221E]">${name}</span>
+                    <span class="font-bold text-[#2C221E]">${hours} 小時 <span class="text-xs text-[#8C7A6B] font-normal">(${pct}%)</span></span>
+                `;
+                listContainer.appendChild(item);
+            });
+
+            const totalRow = document.createElement('div');
+            totalRow.className = 'flex justify-between items-center border-t border-white/80 pt-2 font-bold text-[#2C221E] text-sm mt-2';
+            totalRow.innerHTML = `
+                <span>總計時程</span>
+                <span class="text-[#2C221E]">${totalHoursAll} 小時</span>
+            `;
+            listContainer.appendChild(totalRow);
+
+            const ctx = document.getElementById('rangeChart').getContext('2d');
+            if (rangeChartInstance) {
+                rangeChartInstance.destroy();
+            }
+
+            const labels = sortedProjects.map(([name]) => name);
+            const data = sortedProjects.map(([_, hours]) => hours);
+            const colors = labels.map(name => {
+                const projColor = getProjectColor(name);
+                return projColor.border;
+            });
+
+            rangeChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: '累計工時 (hr)',
+                        data: data,
+                        backgroundColor: colors,
+                        borderColor: colors,
+                        borderWidth: 1,
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y', 
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: '小時數',
+                                font: { size: 11 }
+                            }
+                        },
+                        y: {
+                            ticks: {
+                                font: { size: 11 }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return ` ${context.parsed.x} 小時`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function saveAndRefresh() {
+            localStorage.setItem('timeTrackerV3', JSON.stringify(storage));
+            syncSettingsUI();
+            renderFolderTabs();
+            renderFolderProjects();
+            renderMonthlyProjects();
+            renderCalendar();
+        }
+
+        function updateProjectSelectors() {
+            const calendarYear = document.getElementById('yearSelect').value;
+            const calendarMonth = parseInt(document.getElementById('monthSelect').value);
+            const calendarMonthStr = `${calendarYear}-${String(calendarMonth+1).padStart(2,'0')}`;
+            const calendarMonthlyProjs = storage.monthlyProjects[calendarMonthStr] || [];
+
+            const modalProjSelect = document.getElementById('modalProjSelect');
+            const originalVal = modalProjSelect.value;
+            modalProjSelect.innerHTML = '';
+            
+            if(calendarMonthlyProjs.length === 0) {
+                const opt = document.createElement('option');
+                opt.value = ""; opt.textContent = "-- 請先在上方「當月項目」加入此月份執行清單 --";
+                modalProjSelect.appendChild(opt);
+            } else {
+                calendarMonthlyProjs.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p; opt.textContent = p;
+                    modalProjSelect.appendChild(opt);
+                });
+                if(calendarMonthlyProjs.includes(originalVal)) modalProjSelect.value = originalVal;
+            }
+
+            const globalSelects = [
+                document.getElementById('renameSourceSelect'),
+                document.getElementById('deleteDataSelect'),
+                document.getElementById('summaryProjSelect')
+            ];
+            globalSelects.forEach(sel => {
+                if(!sel) return;
+                const current = sel.value;
+                sel.innerHTML = '<option value="">-- 選擇項目 --</option>';
+                storage.projects.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p; opt.textContent = p;
+                    sel.appendChild(opt);
+                });
+                if(storage.projects.includes(current)) sel.value = current;
+            });
+
+            const folderRenameSel = document.getElementById('renameFolderSourceSelect');
+            if (folderRenameSel) {
+                const currentFolderVal = folderRenameSel.value;
+                folderRenameSel.innerHTML = '<option value="">-- 選擇資料夾 --</option>';
+                ensureFolderOrder();
+                const defaultFolder = storage.defaultFolder || "其他";
+                storage.folderOrder.forEach(f => {
+                    if (storage.folders.hasOwnProperty(f)) {
+                        const opt = document.createElement('option');
+                        opt.value = f;
+                        opt.textContent = f + (f === defaultFolder ? " (預設資料夾)" : "");
+                        folderRenameSel.appendChild(opt);
+                    }
+                });
+                if (storage.folders[currentFolderVal]) folderRenameSel.value = currentFolderVal;
+            }
+        }
+
+        function exportJSON() {
+            const blob = new Blob([JSON.stringify(storage, null, 2)], {type: 'application/json'});
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `work_tracker_backup_${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+        }
+
+        function importJSON(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if(confirm('警告：匯入後將完全覆蓋目前所有項目與紀錄！確定要執行嗎？')) {
+                        storage = data;
+                        if (!storage.dailyNotes) storage.dailyNotes = {};
+                        if (!storage.folders) storage.folders = { "其他": [...storage.projects] };
+                        
+                        if (storage.folders["全部"]) {
+                            storage.folders["其他"] = storage.folders["全部"];
+                            delete storage.folders["全部"];
+                        }
+                        const defaultFolder = storage.defaultFolder || "其他";
+                        if (!storage.folders[defaultFolder]) {
+                            storage.folders[defaultFolder] = [];
+                        }
+                        if (!storage.monthlyProjects) storage.monthlyProjects = {};
+                        if (storage.saturation === undefined) storage.saturation = 85;
+                        
+                        ensureFolderOrder();
+                        saveAndRefresh();
+                    }
+                } catch(err) { alert('JSON 格式錯誤'); }
+                event.target.value = '';
+            };
+            reader.readAsText(file);
+        }
+
+        window.onload = () => {
+            const defaultFolder = storage.defaultFolder || "其他";
+
+            syncSettingsUI();
+
+            // 啟動時同步更換背景桌布
+            const initialYear = document.getElementById('yearSelect').value || "2026";
+            const initialMonth = parseInt(document.getElementById('monthSelect').value) || new Date().getMonth();
+            updateDynamicBackground(initialYear, initialMonth);
+
+            if (storage.logs && storage.logs.length > 0) {
+                storage.logs.forEach(log => {
+                    const projName = log.name;
+                    if (projName) {
+                        if (!storage.projects.includes(projName)) {
+                            storage.projects.push(projName);
+                        }
+
+                        let isFolderFound = false;
+                        Object.keys(storage.folders).forEach(f => {
+                            if (storage.folders[f] && storage.folders[f].includes(projName)) {
+                                isFolderFound = true;
+                            }
+                        });
+
+                        if (!isFolderFound) {
+                            if (!storage.folders[defaultFolder]) {
+                                storage.folders[defaultFolder] = [];
+                            }
+                            if (!storage.folders[defaultFolder].includes(projName)) {
+                                storage.folders[defaultFolder].push(projName);
+                            }
+                        }
+                    }
+                });
+            }
+
+            if (storage.logs && storage.logs.length > 0) {
+                storage.logs.forEach(log => {
+                    if (log.hours > 0) {
+                        const dateParts = log.date.split('-');
+                        if (dateParts.length === 3) {
+                            const monthStr = `${dateParts[0]}-${dateParts[1]}`;
+                            if (!storage.monthlyProjects[monthStr]) {
+                                storage.monthlyProjects[monthStr] = [];
+                            }
+                            if (!storage.monthlyProjects[monthStr].includes(log.name)) {
+                                storage.monthlyProjects[monthStr].push(log.name);
+                            }
+                        }
+                    }
+                });
+                localStorage.setItem('timeTrackerV3', JSON.stringify(storage));
+            }
+
+            let assigned = new Set();
+            Object.keys(storage.folders).forEach(f => {
+                if (f !== defaultFolder) {
+                    storage.folders[f] = (storage.folders[f] || []).filter(p => {
+                        if (assigned.has(p)) return false;
+                        assigned.add(p);
+                        return true;
+                    });
+                }
+            });
+
+            storage.projects.forEach(p => {
+                if (!assigned.has(p)) {
+                    if (!storage.folders[defaultFolder]) storage.folders[defaultFolder] = [];
+                    if (!storage.folders[defaultFolder].includes(p)) {
+                        storage.folders[defaultFolder].push(p);
+                    }
+                }
+            });
+            storage.folders[defaultFolder] = (storage.folders[defaultFolder] || []).filter(p => !assigned.has(p));
+
+            ensureFolderOrder();
+            renderFolderTabs();
+            renderFolderProjects();
+            renderMonthlyProjects();
+            renderCalendar();
+        };
+    </script>
+</body>
+</html>
