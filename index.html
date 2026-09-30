@@ -50,7 +50,7 @@
         /* 月曆網格與日期格子 (優化透光：移除重複 backdrop-filter 確保可直接透視被霧化的大圖背景) */
         .calendar-grid {
             display: grid;
-            grid-template-columns: repeat(7, 1fr);
+            grid-template-columns: repeat(7, minmax(0, 1fr));
             gap: 2px;
             background-color: rgba(200, 195, 185, 0.25);
             border: 1px solid rgba(255, 255, 255, 0.4);
@@ -59,11 +59,14 @@
         }
 
         .calendar-day {
-            min-height: 120px;
+            height: 125px;
+            box-sizing: border-box;
             background-color: rgba(255, 255, 255, var(--day-opacity));
             padding: 8px;
             transition: background-color 0.2s ease, opacity 0.2s ease;
             position: relative;
+            display: flex;
+            flex-direction: column;
         }
         .calendar-day:hover { 
             background-color: rgba(255, 255, 255, min(1, calc(var(--day-opacity) + 0.22)));
@@ -273,15 +276,6 @@
                 </div>
             </div>
 
-            <div class="calendar-grid text-center">
-                <div class="bg-white/60 p-2 text-xs font-bold text-[#6E5D50]">週日</div>
-                <div class="bg-white/60 p-2 text-xs font-bold text-[#6E5D50]">週一</div>
-                <div class="bg-white/60 p-2 text-xs font-bold text-[#6E5D50]">週二</div>
-                <div class="bg-white/60 p-2 text-xs font-bold text-[#6E5D50]">週三</div>
-                <div class="bg-white/60 p-2 text-xs font-bold text-[#6E5D50]">週四</div>
-                <div class="bg-white/60 p-2 text-xs font-bold text-[#6E5D50]">週五</div>
-                <div class="bg-white/60 p-2 text-xs font-bold text-[#6E5D50]">週六</div>
-            </div>
             <div id="calendarDays" class="calendar-grid"></div>
         </div>
 
@@ -1210,11 +1204,15 @@
             const calendarMonthlyProjs = storage.monthlyProjects[calendarMonthStr] || [];
 
             const container = document.getElementById('calendarDays');
-            container.innerHTML = '';
+            
+            // 將「週日~週六」標頭直接寫入同一個 Grid 容器，確保 100% 欄位對齊
+            const weekdays = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
+            let htmlContent = weekdays.map(w => `<div class="bg-white/60 p-2 text-xs font-bold text-[#6E5D50] text-center">${w}</div>`).join('');
 
             for(let i=0; i<firstDay; i++) {
-                container.innerHTML += `<div class="calendar-day opacity-40"></div>`;
+                htmlContent += `<div class="calendar-day opacity-40"></div>`;
             }
+            container.innerHTML = htmlContent;
 
             for(let d=1; d<=daysInMonth; d++) {
                 const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
@@ -1265,7 +1263,7 @@
                         </div>
                         <div class="add-btn" onclick="event.stopPropagation(); openModal('${dateStr}')">+</div>
                     </div>
-                    <div class="overflow-y-auto max-h-[80px] custom-scrollbar">${logHtml}</div>
+                    <div class="flex-1 overflow-y-auto min-h-0 custom-scrollbar">${logHtml}</div>
                 `;
 
                 if (activeNoteDate === dateStr) {
