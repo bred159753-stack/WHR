@@ -218,6 +218,12 @@
                                         <span id="panelBlurValue" class="text-xs font-bold text-[#2C221E] w-8 text-right">16px</span>
                                     </div>
                                 </label>
+
+                                <!-- 4. 背景設定 -->
+                                <button onclick="openBgSettingsModal()" class="text-xs font-bold text-[#5C4D44] hover:text-[#2C221E] flex items-center justify-between gap-2 bg-white/50 hover:bg-white/80 p-2 rounded-lg border border-white/60 transition">
+                                    <span>背景設定</span>
+                                    <span class="text-[#8C7A6B]">設定 ►</span>
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -428,6 +434,70 @@
         </div>
     </div>
 
+    <!-- 彈窗 - 背景設定 -->
+    <div id="bgSettingsModal" class="fixed inset-0 bg-black/40 backdrop-blur-sm hidden flex items-center justify-center z-50">
+        <div class="glass-modal p-6 w-[95%] max-w-5xl overflow-y-auto max-h-[90vh] space-y-4">
+            <div class="flex justify-between items-center border-b border-white/60 pb-2">
+                <h3 class="font-bold text-lg text-[#2C221E]">背景設定</h3>
+                <button onclick="closeBgSettingsModal()" class="text-[#8C7A6B] hover:text-[#2C221E] font-bold text-lg">✕</button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- 左側：設定 -->
+            <div class="space-y-4">
+            <!-- 更新頻率 -->
+            <div class="glass-subcard p-3 space-y-2">
+                <div class="text-xs font-bold text-[#6E5D50]">更新頻率：</div>
+                <div class="flex flex-wrap gap-4 text-sm font-bold text-[#5C4D44]">
+                    <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="bgFrequency" value="daily" class="accent-[#2C221E]">每日更新</label>
+                    <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="bgFrequency" value="weekly" class="accent-[#2C221E]">每週更新</label>
+                    <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="bgFrequency" value="monthly" class="accent-[#2C221E]">每月更新</label>
+                </div>
+            </div>
+
+            <!-- 圖片順序 -->
+            <div class="glass-subcard p-3 space-y-2">
+                <div class="text-xs font-bold text-[#6E5D50]">圖片順序：</div>
+                <div class="flex flex-wrap gap-4 text-sm font-bold text-[#5C4D44]">
+                    <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="bgOrder" value="sequential" class="accent-[#2C221E]">照順序</label>
+                    <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="bgOrder" value="random" class="accent-[#2C221E]">隨機順序</label>
+                </div>
+            </div>
+
+            <!-- Pinterest board -->
+            <div class="glass-subcard p-3 space-y-2">
+                <div class="text-xs font-bold text-[#6E5D50]">Pinterest board 網址：</div>
+                <div class="flex gap-2">
+                    <input type="url" id="bgBoardUrlInput" placeholder="https://www.pinterest.com/使用者/board名稱/" class="flex-1 border border-white/80 p-2 rounded-lg text-xs bg-white/80 text-[#2C221E] focus:outline-none focus:border-[#2C221E] shadow-sm">
+                    <button id="bgFetchBtn" onclick="fetchPinterestBoard()" class="bg-[#8C7A6B] hover:bg-[#6E5D50] disabled:opacity-50 text-white px-3 py-2 rounded-lg text-xs font-bold transition shrink-0 shadow-sm">讀取圖片</button>
+                </div>
+                <div id="bgFetchStatus" class="text-[11px] text-[#8C7A6B] font-bold min-h-[1em]"></div>
+            </div>
+
+            <!-- 圖片清單 -->
+            <div class="glass-subcard p-3 space-y-2">
+                <div class="flex justify-between items-center text-xs font-bold text-[#6E5D50]">
+                    <span>圖片網址清單 (一行一個，可手動增刪；清空則使用預設背景)：</span>
+                    <span id="bgImageCount" class="text-[#2C221E]">0 張</span>
+                </div>
+                <textarea id="bgImageListInput" oninput="updateBgImageCount()" class="w-full h-32 border border-white/80 p-2 rounded-lg text-[11px] font-mono bg-white/80 text-[#2C221E] focus:outline-none focus:border-[#2C221E] shadow-sm custom-scrollbar" placeholder="https://i.pinimg.com/736x/..."></textarea>
+            </div>
+            </div>
+
+            <!-- 右側：縮圖預覽 (拖曳交換順序) -->
+            <div class="glass-subcard p-3 flex flex-col min-h-[16rem]">
+                <div class="text-xs font-bold text-[#6E5D50] mb-2">圖片縮圖 (拖曳一張到另一張上可交換順序)：</div>
+                <div id="bgThumbGrid" class="grid grid-cols-3 sm:grid-cols-4 gap-2 overflow-y-auto custom-scrollbar max-h-[60vh] content-start flex-1"></div>
+            </div>
+            </div>
+
+            <div class="flex gap-2 pt-2 border-t border-white/60">
+                <button onclick="closeBgSettingsModal()" class="flex-1 bg-white/60 hover:bg-white/90 text-[#2C221E] py-2.5 rounded-xl text-sm font-bold border border-white/80 transition">取消</button>
+                <button onclick="saveBgSettings()" class="flex-1 bg-[#2C221E] hover:bg-[#42342E] text-white py-2.5 rounded-xl text-sm font-bold shadow-md transition">確定</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 彈窗 - 自訂區間工時分析統計 -->
     <div id="rangeAnalysisModal" class="fixed inset-0 bg-black/40 backdrop-blur-sm hidden flex items-center justify-center z-50">
         <div class="glass-modal p-6 w-[90%] max-w-2xl overflow-y-auto max-h-[90vh] space-y-4">
@@ -505,6 +575,20 @@
         if (!storage.folderOrder) {
             storage.folderOrder = Object.keys(storage.folders);
         }
+        normalizeBgSettings(storage);
+
+        // 背景設定：更新頻率、順序、Pinterest board 與圖片清單
+        function normalizeBgSettings(s) {
+            const bg = s.bgSettings || {};
+            s.bgSettings = {
+                frequency: ['daily', 'weekly', 'monthly'].includes(bg.frequency) ? bg.frequency : 'monthly',
+                order: bg.order === 'random' ? 'random' : 'sequential',
+                boardUrl: bg.boardUrl || '',
+                images: Array.isArray(bg.images) ? bg.images : [],
+                seed: Number.isInteger(bg.seed) ? bg.seed : Math.floor(Math.random() * 2147483647)
+            };
+            delete s.weeklyBackgrounds;
+        }
 
         let currentModalDate = "";
         let activeNoteDate = "";     
@@ -512,7 +596,7 @@
         let tempNoteValue = "";      
         let rangeChartInstance = null;
 
-        // 高清 Unsplash 季節風景桌布清單 (已對調 8月與 9月 素材)
+        // 高清 Unsplash 季節風景桌布清單
         const presetWallpapers = [
             "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1920&q=80", // 1月: 晴朗冬雪日光
             "https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=1920&q=80", // 2月: 星空蔚藍雪山
@@ -529,6 +613,7 @@
         ];
 
         // 動態更換全頁背景圖 (優先讀取 image/YYYY_MM_bg.jpg，若無則讀取 Unsplash 景觀圖)
+        let bgRequestId = 0;
         function updateDynamicBackground(year, monthIndex) {
             const monthStr = String(monthIndex + 1).padStart(2, '0');
             const customImgPath = `image/${year}_${monthStr}_bg.jpg`;
@@ -536,13 +621,23 @@
 
             const bgLayer = document.getElementById('fixed-bg-layer');
             if (!bgLayer) return;
+            const requestId = ++bgRequestId;
+
+            // 背景設定有圖片清單時優先使用
+            const pickedUrl = pickBgImage(year, monthIndex);
+            if (pickedUrl) {
+                bgLayer.style.backgroundImage = `url("${pickedUrl.replace(/"/g, '%22')}")`;
+                return;
+            }
 
             const imgTest = new Image();
             imgTest.src = customImgPath;
             imgTest.onload = function() {
+                if (requestId !== bgRequestId) return;
                 bgLayer.style.backgroundImage = `url('${customImgPath}')`;
             };
             imgTest.onerror = function() {
+                if (requestId !== bgRequestId) return;
                 bgLayer.style.backgroundImage = `url('${fallbackUrl}')`;
             };
         }
@@ -1231,7 +1326,7 @@
                 
                 const dayDiv = document.createElement('div');
                 dayDiv.className = 'calendar-day';
-                
+
                 dayDiv.onclick = (e) => {
                     if (e.target.closest('.add-btn') || e.target.closest('.log-entry') || e.target.closest('.note-popup')) {
                         return;
@@ -1310,6 +1405,213 @@
             renderGanttFilter();
             renderGantt();
             renderSummaryReport();
+        }
+
+        // 透過公開 CORS 代理讀取 Pinterest board 的 RSS (依序嘗試，任一成功即可)
+        const corsProxies = [
+            url => `https://r.jina.ai/${url}`,
+            url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+            url => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(url)}`
+        ];
+
+        // 將 board 網址轉換為 RSS 網址：https://www.pinterest.com/<使用者>/<board>.rss
+        function toPinterestRssUrl(boardUrl) {
+            let u;
+            try {
+                u = new URL(boardUrl.trim());
+            } catch (e) {
+                return null;
+            }
+            if (!/(^|\.)pinterest\.[a-z.]+$/i.test(u.hostname)) return null;
+            const parts = u.pathname.replace(/\.rss$/i, '').split('/').filter(Boolean);
+            if (parts.length < 2) return null;
+            return `https://www.pinterest.com/${parts[0]}/${parts[1]}.rss`;
+        }
+
+        function extractPinterestImages(text) {
+            const matches = text.match(/https:\/\/i\.pinimg\.com\/[^\s"'<>()&]+?\.(?:jpe?g|png|gif|webp)/gi) || [];
+            const seen = new Set();
+            const result = [];
+            matches.forEach(m => {
+                // 縮圖 (236x 等) 改用 736x 較高解析度版本
+                const url = m.replace(/\/\d+x(\d+)?\//, '/736x/');
+                const hash = url.split('/').pop();
+                if (!seen.has(hash)) {
+                    seen.add(hash);
+                    result.push(url);
+                }
+            });
+            return result;
+        }
+
+        async function fetchPinterestBoard() {
+            const boardInput = document.getElementById('bgBoardUrlInput');
+            const status = document.getElementById('bgFetchStatus');
+            const btn = document.getElementById('bgFetchBtn');
+            const rssUrl = toPinterestRssUrl(boardInput.value);
+            if (!rssUrl) {
+                status.textContent = '網址格式不正確，請貼上像 https://www.pinterest.com/使用者/board名稱/ 的網址';
+                return;
+            }
+
+            btn.disabled = true;
+            status.textContent = '讀取中...';
+            for (const proxy of corsProxies) {
+                try {
+                    const res = await fetch(proxy(rssUrl));
+                    if (!res.ok) continue;
+                    const images = extractPinterestImages(await res.text());
+                    if (images.length === 0) continue;
+                    document.getElementById('bgImageListInput').value = images.join('\n');
+                    updateBgImageCount();
+                    status.textContent = `已讀取 ${images.length} 張圖片 (Pinterest RSS 最多提供最新 25 張)`;
+                    btn.disabled = false;
+                    return;
+                } catch (e) {
+                    // 換下一個代理
+                }
+            }
+            status.textContent = '讀取失敗：請確認 board 為公開，或稍後再試 (也可直接在下方手動貼上圖片網址)';
+            btn.disabled = false;
+        }
+
+        function getBgImageListFromInput() {
+            return document.getElementById('bgImageListInput').value
+                .split('\n').map(s => s.trim()).filter(Boolean);
+        }
+
+        function updateBgImageCount() {
+            document.getElementById('bgImageCount').textContent = `${getBgImageListFromInput().length} 張`;
+            renderBgThumbnails();
+        }
+
+        // 右側縮圖：拖曳一張放到另一張上即交換兩者順序，並同步回網址清單
+        function renderBgThumbnails() {
+            const grid = document.getElementById('bgThumbGrid');
+            const images = getBgImageListFromInput();
+            grid.innerHTML = '';
+            if (images.length === 0) {
+                grid.innerHTML = '<div class="col-span-full text-center py-10 text-[#8C7A6B] text-xs">尚無圖片 (將使用預設每月背景)</div>';
+                return;
+            }
+
+            images.forEach((url, idx) => {
+                const cell = document.createElement('div');
+                cell.className = 'relative aspect-square rounded-lg overflow-hidden border-2 border-white/80 bg-white/50 cursor-move shadow-sm transition';
+                cell.setAttribute('draggable', 'true');
+                cell.title = url;
+
+                const img = document.createElement('img');
+                img.src = url;
+                img.loading = 'lazy';
+                img.draggable = false;
+                img.className = 'w-full h-full object-cover pointer-events-none';
+                img.onerror = () => {
+                    img.remove();
+                    cell.insertAdjacentHTML('beforeend', '<div class="w-full h-full flex items-center justify-center text-[10px] text-red-500 font-bold">無法載入</div>');
+                };
+                cell.appendChild(img);
+                cell.insertAdjacentHTML('beforeend', `<span class="absolute top-1 left-1 bg-[#2C221E]/80 text-white text-[10px] font-bold px-1.5 rounded">${idx + 1}</span>`);
+
+                cell.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.setData('text/bg-index', String(idx));
+                    e.dataTransfer.effectAllowed = 'move';
+                    cell.classList.add('opacity-40');
+                });
+                cell.addEventListener('dragend', () => cell.classList.remove('opacity-40'));
+                cell.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    cell.classList.add('border-[#2C221E]');
+                });
+                cell.addEventListener('dragleave', () => cell.classList.remove('border-[#2C221E]'));
+                cell.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    cell.classList.remove('border-[#2C221E]');
+                    const from = parseInt(e.dataTransfer.getData('text/bg-index'));
+                    if (isNaN(from) || from === idx) return;
+                    [images[from], images[idx]] = [images[idx], images[from]];
+                    document.getElementById('bgImageListInput').value = images.join('\n');
+                    updateBgImageCount();
+                });
+
+                grid.appendChild(cell);
+            });
+        }
+
+        function openBgSettingsModal() {
+            const bg = storage.bgSettings;
+            document.querySelector(`input[name="bgFrequency"][value="${bg.frequency}"]`).checked = true;
+            document.querySelector(`input[name="bgOrder"][value="${bg.order}"]`).checked = true;
+            document.getElementById('bgBoardUrlInput').value = bg.boardUrl;
+            document.getElementById('bgImageListInput').value = bg.images.join('\n');
+            document.getElementById('bgFetchStatus').textContent = '';
+            updateBgImageCount();
+            document.getElementById('bgSettingsModal').classList.remove('hidden');
+        }
+
+        function closeBgSettingsModal() {
+            document.getElementById('bgSettingsModal').classList.add('hidden');
+        }
+
+        function saveBgSettings() {
+            const bg = storage.bgSettings;
+            const newOrder = document.querySelector('input[name="bgOrder"]:checked').value;
+            const newImages = getBgImageListFromInput();
+            // 重新選擇隨機或圖片清單變動時，重新洗牌
+            if (newOrder === 'random' && (bg.order !== 'random' || newImages.join('\n') !== bg.images.join('\n'))) {
+                bg.seed = Math.floor(Math.random() * 2147483647);
+            }
+            bg.frequency = document.querySelector('input[name="bgFrequency"]:checked').value;
+            bg.order = newOrder;
+            bg.boardUrl = document.getElementById('bgBoardUrlInput').value.trim();
+            bg.images = newImages;
+            closeBgSettingsModal();
+            localStorage.setItem('timeTrackerV3', JSON.stringify(storage));
+            refreshBackground();
+        }
+
+        function refreshBackground() {
+            updateDynamicBackground(document.getElementById('yearSelect').value, parseInt(document.getElementById('monthSelect').value));
+        }
+
+        // 依更新頻率計算目前的期數 (日 / 週(週日起算) / 月)
+        // 日、週以「所選月份 + 今天的日期」為準 (如今天 13 日 → 所選月份的 13 日；該月沒有這天則取月底)
+        function getBgPeriodIndex(frequency, year, monthIndex) {
+            if (frequency === 'monthly') return year * 12 + monthIndex;
+            const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+            const day = Math.min(new Date().getDate(), daysInMonth);
+            const dayIndex = Math.floor(Date.UTC(year, monthIndex, day) / 86400000);
+            if (frequency === 'weekly') return Math.floor((dayIndex + 4) / 7); // 1970/01/01 為週四
+            return dayIndex;
+        }
+
+        // 以固定種子洗牌，確保同一期間內重新整理仍顯示同一張圖
+        function seededShuffle(length, seed) {
+            const order = Array.from({ length }, (_, i) => i);
+            let s = seed >>> 0;
+            for (let i = length - 1; i > 0; i--) {
+                s = (s + 0x6D2B79F5) >>> 0;
+                let t = Math.imul(s ^ (s >>> 15), 1 | s);
+                t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
+                const r = ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+                const j = Math.floor(r * (i + 1));
+                [order[i], order[j]] = [order[j], order[i]];
+            }
+            return order;
+        }
+
+        function pickBgImage(year, monthIndex) {
+            const bg = storage.bgSettings;
+            const n = bg.images.length;
+            if (n === 0) return null;
+            const period = getBgPeriodIndex(bg.frequency, parseInt(year), monthIndex);
+            const pos = ((period % n) + n) % n;
+            if (bg.order === 'random') {
+                // 每輪 (n 期) 使用不同的洗牌結果
+                const cycle = Math.floor(period / n);
+                return bg.images[seededShuffle(n, bg.seed ^ Math.imul(cycle + 1, 0x9E3779B1))[pos]];
+            }
+            return bg.images[pos];
         }
 
         function isToday(y, m, d) {
@@ -1780,10 +2082,12 @@
                             storage.folders[defaultFolder] = [];
                         }
                         if (!storage.monthlyProjects) storage.monthlyProjects = {};
+                        normalizeBgSettings(storage);
                         if (storage.saturation === undefined) storage.saturation = 85;
                         
                         ensureFolderOrder();
                         saveAndRefresh();
+                        refreshBackground();
                     }
                 } catch(err) { alert('JSON 格式錯誤'); }
                 event.target.value = '';
